@@ -1,0 +1,25 @@
+diff --git a/setup.py b/setup.py
+index 2a8e29f..67bd64b 100644
+--- a/setup.py
++++ b/setup.py
+@@ -13,6 +13,13 @@ class PyTest(TestCommand):
+         errno = pytest.main(self.test_args)
+         sys.exit(errno)
+ 
++extra = {}
++if sys.version_info >= (3,):
++    extra['use_2to3'] = True
++    #extra['convert_2to3_doctests'] = ['tests/doctests/*']
++    #extra['convert_2to3_doctests'] = glob.glob(os.path.join("owslib", "tests", "doctests", "*.txt"))
++    #extra['use_2to3_fixers'] = ['your.fixers']
++
+ readme = open('README.txt').read()
+ reqs = [line.strip() for line in open('requirements.txt')]
+ 
+@@ -40,5 +47,6 @@ setup(name              = 'OWSLib',
+         'Programming Language :: Python',
+         'Topic :: Scientific/Engineering :: GIS',
+         ],
++      **extra
+ )
+ 

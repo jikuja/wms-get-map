@@ -1,0 +1,182 @@
+#!/usr/bin/python3
+import sys
+import argparse
+import pyproj
+import geopy.geocoders
+import owslib.wms
+import logging as log
+
+def fetch_tile(wms, coordinates, size_in, size_out, layer):
+    img = wms.getmap(
+            layers=[layer],
+            srs='EPSG:3067',
+            bbox=(coordinates[0], coordinates[1], 
+                coordinates[0]+size_in[0], coordinates[1]+size_in[1]),
+            size=(size_out[0], size_out[1]),
+            format='image/png'
+            )
+    return img
+
+def wgs84_to_tm35(coordinates):
+    wgs84 = pyproj.Proj("+init=EPSG:4326")
+    tm35 = pyproj.Proj("+proj=utm +zone=35 +ellps=GRS80 +towgs84=0,0,0,0,0,0,0 +units=m +no_defs")
+    converted = pyproj.transform(wgs84, tm35, coordinates[0], coordinates[1])
+    return [converted[0], converted[1]]
+
+def get_coordinates(geo, address):
+    if geo == "google":
+        log.debug("Using GoogleV3 geocoder")
+        coder = geopy.geocoders.GoogleV3()
+        place, (lat, lon) = coder.geocode(address, sensor=False)
+        log.debug("Geocoded place: " + place)
+        return [lon, lat]
+
+def parse_geometry(s, reason):
+    try:
+        width,  height = s.split(":")
+    except ValueError:
+        log.error("two values needed when parsing " + reason)
+        sys.exit()
+    try:
+        width = int(width)
+        height = int(height)
+    except ValueError:
+        log.error(": error: integer required when parsing " + reason)
+        sys.exit()
+    return [width, height]
+
+
+def parse_arguments(parser):
+    ####################
+    # location
+    ####################
+    group3 = parser.add_argument_group("location")
+    group3.add_argument("x", type=str, help="x coordinate", nargs="?")
+    group3.add_argument("y", type=str, help="y coordinate", nargs="?")
+    group3.add_argument("-a", "--address", type=str, help="address to geocode. overrides coordinates")
+
+    group = parser.add_argument_group("input")
+    group.add_argument("--corner",
+            help="given coordinate or address is in lower left corner", action="store_true")
+    group3.add_argument("-A", "--geo", type=str, help="geocoder system",
+            default="google")
+    group3.add_argument("--wgs-84", action="store_true",
+            help="x and y are WGS84 coordinates", default=False)
+
+    group.add_argument("--size-input",  type=str, help="input size",
+            metavar="DX:DY", default="4000:4000")
+
+    group.add_argument("--scale", type=int, help="scale(1 px : N meters). overrides input size",
+            metavar="N", default=0)
+
+    group.add_argument("--layer", type=str,
+            default="peruskartta")
+    group.add_argument("--service", type=str,
+            default="peruskartta?")
+    group.add_argument("--url", type=str,
+            default="http://tiles.kartat.kapsi.fi/")
+
+    #####################
+    # output
+    ####################
+    group2 = parser.add_argument_group("output")
+    group2.add_argument("--size-output", type=str, help="output size",
+            metavar="dx:dy", default="4000:4000")
+
+    group2.add_argument("-O", "--output", type=str, help="output file")
+
+    #################
+    # verbose
+    #################
+    parser.add_argument("-v", "--verbose", 
+            help="increase output verbosity", action="count", default=0)
+    parser.add_argument("--dryrun", action="count", default=0,
+            help="do not download from WMS")
+
+    return parser.parse_args()
+
+def check_arguments(args):
+    if args.address == None:
+        if args.x != None and args.y != None:
+            try:
+                args.x = float(args.x)
+                args.y = float(args.y)
+            except ValueError:
+                log.error("both x and y must be floats")
+                sys.exit()
+        else:
+            log.error(":error: -1 or x and y are required")
+            sys.exit()
+
+    if args.size_input != None:
+        args.size_input = parse_geometry(args.size_input, "output size")
+
+    if args.size_output != None:
+        args.size_output = parse_geometry(args.size_output, "input size")
+
+def main():
+    parser = argparse.ArgumentParser()
+    args = parse_arguments(parser)
+
+    if args.verbose == 0:
+        log.basicConfig(format="%(levelname)s: %(message)s")
+    elif args.verbose == 1:
+        log.basicConfig(format="%(levelname)s: %(message)s", level=log.INFO)
+        log.info("Verbose output.")
+    else:
+        log.basicConfig(format="%(levelname)s: %(message)s", level=log.DEBUG)
+        log.info("Verbose output.")
+
+    log.debug(args)
+    check_arguments(args)
+
+    if args.address != None:
+        log.debug("Using geocoder")
+        wgs84_coordinates = get_coordinates(args.geo, args.address)
+        log.info("WGS 84: " + str(wgs84_coordinates))
+        tm35_coordinates = wgs84_to_tm35(wgs84_coordinates)
+    else:
+        if args.wgs_84:
+            log.debug("Coordinates are given in WGS84")
+            wgs84_coordinates = [args.x, args.y]
+            tm35_coordinates = wgs84_to_tm35(wgs84_coordinates)
+        else:
+            log.debug("Coordinates are given in ETRS-TM35FIN")
+            tm35_coordinates = [args.x, args.y]
+
+    log.info("ETRS-TM35FIN: " + str(tm35_coordinates))
+
+    wms = owslib.wms.WebMapService(args.url + args.service)
+
+
+    if args.scale > 0:
+        args.size_input[0] = args.size_output[0] * args.scale
+        args.size_input[1] = args.size_output[1] * args.scale
+
+    if not args.corner:
+        #move tm35_coordinates
+        tm35_coordinates[0] -= args.size_input[0]/2
+        tm35_coordinates[1] -= args.size_input[1]/2
+
+    log.debug(args)
+
+    if args.dryrun:
+        log.warn("Exiting: dryrun...")
+        sys.exit()
+
+    if args.size_output[0] <= 4096 and args.size_output[1] <= 4096:
+        #fetch one tile
+        img = fetch_tile(wms, tm35_coordinates, args.size_input, args.size_output, args.layer)
+        if args.output != None:
+            out = open(args.output, "wb")
+            out.write(img.read())
+            out.close()
+            return
+        else:
+            raise(NotImplementedError)
+    else:
+        #loop and fetch tiles
+        raise(NotImplementedError)
+
+if __name__ == "__main__":
+    main()
