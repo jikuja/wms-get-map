@@ -1,10 +1,20 @@
-#!/usr/bin/python3
+#!/usr/bin/python
+import os
 import sys
 import argparse
 import pyproj
-import geopy.geocoders
-import owslib.wms
 import logging as log
+
+import geopy.geocoders
+
+if sys.version_info >= (3,):
+    try:
+        import owslib.wms
+    except ImportError:
+        sys.path.append(os.path.join("", "lib"))
+        import owslib.wms
+else:
+    import owslib.wms
 
 def fetch_tile(wms, coordinates, size_in, size_out, layer):
     img = wms.getmap(
