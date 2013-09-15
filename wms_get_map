@@ -2,10 +2,20 @@
 import os
 import sys
 import argparse
-import pyproj
 import logging as log
 
-import geopy.geocoders
+PYPROJ_DISABLED = False
+GEOPY_DISABLED = False
+
+try:
+    import pyproj
+except:
+    PYPROJ_DISABLED = True
+
+try:
+    import geopy.geocoders
+except ImportError:
+    GEOPY_DISABLED = True
 
 if sys.version_info >= (3,):
     try:
@@ -36,7 +46,11 @@ def wgs84_to_tm35(coordinates):
 def get_coordinates(geo, address):
     if geo == "google":
         log.debug("Using GoogleV3 geocoder")
-        coder = geopy.geocoders.GoogleV3()
+        try:
+            coder = geopy.geocoders.GoogleV3()
+        except AttributeError:
+            log.error("Exiting: Geopy doesn't have GoogleV3. Maybe too old version")
+            sys.exit()
         place, (lat, lon) = coder.geocode(address, sensor=False)
         log.debug("Geocoded place: " + place)
         return [lon, lat]
@@ -106,7 +120,7 @@ def parse_arguments(parser):
     return parser.parse_args()
 
 def check_arguments(args):
-    if args.address == None:
+    if args.address == None or GEOPY_DISABLED == True or PYPROJ_DISABLED == True:
         if args.x != None and args.y != None:
             try:
                 args.x = float(args.x)
@@ -138,9 +152,13 @@ def main():
         log.info("Verbose output.")
 
     log.debug(args)
+    if GEOPY_DISABLED:
+        log.error("geopy disabled: can't use geocoder(--address)!")
+    if PYPROJ_DISABLED:
+        log.error("pyproj disabled: can't convert coordinates! Can't use GoogleV3 geocoder!")
     check_arguments(args)
 
-    if args.address != None:
+    if args.address != None and GEOPY_DISABLED != True and PYPROJ_DISABLED != True:
         log.debug("Using geocoder")
         wgs84_coordinates = get_coordinates(args.geo, args.address)
         log.info("WGS 84: " + str(wgs84_coordinates))
