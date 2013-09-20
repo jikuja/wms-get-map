@@ -49,7 +49,7 @@ def get_coordinates(geo, address):
         try:
             coder = geopy.geocoders.GoogleV3()
         except AttributeError:
-            log.error("Exiting: Geopy doesn't have GoogleV3. Maybe too old version")
+            log.error("Exiting: Geopy doesn't have GoogleV3. Maybe too old version of geopy.")
             sys.exit()
         place, (lat, lon) = coder.geocode(address, sensor=False)
         log.debug("Geocoded place: " + place)
@@ -57,15 +57,15 @@ def get_coordinates(geo, address):
 
 def parse_geometry(s, reason):
     try:
-        width,  height = s.split(":")
+        width,  height = s.split("x")
     except ValueError:
-        log.error("two values needed when parsing " + reason)
+        log.error("Separator missing or too many separators while parsing " + reason)
         sys.exit()
     try:
         width = int(width)
         height = int(height)
     except ValueError:
-        log.error(": error: integer required when parsing " + reason)
+        log.error("Integer required when parsing " + reason)
         sys.exit()
     return [width, height]
 
@@ -74,48 +74,57 @@ def parse_arguments(parser):
     ####################
     # location
     ####################
-    group3 = parser.add_argument_group("location")
-    group3.add_argument("x", type=str, help="x coordinate", nargs="?")
-    group3.add_argument("y", type=str, help="y coordinate", nargs="?")
-    group3.add_argument("-a", "--address", type=str, help="address to geocode. overrides coordinates")
+    location_group = parser.add_argument_group("location")
+    location_group.add_argument("x", type=str, help="x coordinate", nargs="?")
+    location_group.add_argument("y", type=str, help="y coordinate", nargs="?")
+    location_group.add_argument("-a", "--address", type=str, help="address to geocode. overrides coordinates")
 
-    group = parser.add_argument_group("input")
-    group.add_argument("--corner",
-            help="given coordinate or address is in lower left corner", action="store_true")
-    group3.add_argument("-A", "--geo", type=str, help="geocoder system",
+    location_group.add_argument("-A", "--geo", type=str, help="geocoder system",
             default="google")
-    group3.add_argument("--wgs-84", action="store_true",
+    location_group.add_argument("--wgs-84", action="store_true",
             help="x and y are WGS84 coordinates", default=False)
+    location_group.add_argument("--tm35fin", action="store_true",
+            help="x and y are ETRS-TM35FIN coordinates", default=True)
+    #TODO: better input coordinate selection
 
-    group.add_argument("--size-input",  type=str, help="input size",
-            metavar="DX:DY", default="4000:4000")
+    #####################
+    # input
+    #####################
+    input_group = parser.add_argument_group("input")
+    input_group.add_argument("--corner",
+            help="given coordinate or address is in lower left corner", action="store_true")
+    input_group.add_argument("--size-input",  type=str, help="input size(meters)",
+            metavar="widthxheight", default="4000x4000")
 
-    group.add_argument("--scale", type=int, help="scale(1 px : N meters). overrides input size",
+    input_group.add_argument("--scale", type=int, help="scale(1 px : N meters). overrides input size",
             metavar="N", default=0)
 
-    group.add_argument("--layer", type=str,
+    input_group.add_argument("--layer", type=str,
             default="peruskartta")
-    group.add_argument("--service", type=str,
+    input_group.add_argument("--service", type=str,
             default="peruskartta?")
-    group.add_argument("--url", type=str,
+    input_group.add_argument("--url", type=str,
             default="http://tiles.kartat.kapsi.fi/")
+    #TODO: add argument to select WMS query SRS
 
     #####################
     # output
     ####################
-    group2 = parser.add_argument_group("output")
-    group2.add_argument("--size-output", type=str, help="output size",
-            metavar="dx:dy", default="4000:4000")
+    output_group = parser.add_argument_group("output")
+    output_group.add_argument("--size-output", type=str, help="output size(pixels)",
+            metavar="widthxheight", default="4000x4000")
 
-    group2.add_argument("-O", "--output", type=str, help="output file")
+    output_group.add_argument("-O", "--output", type=str, help="output file")
 
     #################
     # verbose
     #################
-    parser.add_argument("-v", "--verbose", 
+    misc_group = parser.add_argument_group("misc")
+    #TODO: move --help here
+    misc_group.add_argument("-v", "--verbose", 
             help="increase output verbosity", action="count", default=0)
-    parser.add_argument("--dryrun", action="count", default=0,
-            help="do not download from WMS")
+    misc_group.add_argument("--dryrun", action="count", default=0,
+            help="do not download raster/PDF map")
 
     return parser.parse_args()
 
