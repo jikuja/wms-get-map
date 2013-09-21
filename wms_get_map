@@ -3,6 +3,7 @@ import os
 import sys
 import argparse
 import logging as log
+import requests
 
 PYPROJ_DISABLED = False
 GEOPY_DISABLED = False
@@ -25,6 +26,13 @@ if sys.version_info >= (3,):
         import owslib.wms
 else:
     import owslib.wms
+
+def fetch_pdf(e, n, w, h, scale):
+    payload = { 'E': e, 'N': n, 'leveys': w, 'korkeus': h, 'mittakaava': scale }
+    r = requests.get("http://pikakartta.kapsi.fi/kartta.php", params=payload)
+    #TODO: check for errors!
+    return r.content
+
 
 def fetch_tile(wms, coordinates, size_in, size_out, layer):
     img = wms.getmap(
@@ -117,6 +125,14 @@ def parse_arguments(parser):
     output_group.add_argument("-O", "--output", type=str, help="output file")
 
     #################
+    # pdf
+    ################
+    pdf_group = parser.add_argument_group("pdf support")
+    # TODO: better help: only output size in px and scale!
+    pdf_group.add_argument("--pdf", action="store_true",
+            help="Save map in PDF format", default=False)
+
+    #################
     # verbose
     #################
     misc_group = parser.add_argument_group("misc")
@@ -183,14 +199,13 @@ def main():
 
     log.info("ETRS-TM35FIN: " + str(tm35_coordinates))
 
-    wms = owslib.wms.WebMapService(args.url + args.service)
 
-
-    if args.scale > 0:
+    if args.scale > 0 and not args.pdf:
         args.size_input[0] = args.size_output[0] * args.scale
         args.size_input[1] = args.size_output[1] * args.scale
 
-    if not args.corner:
+    if not args.corner and not args.pdf:
+        #TODO: fix corner & pdf logic
         #move tm35_coordinates
         tm35_coordinates[0] -= args.size_input[0]/2
         tm35_coordinates[1] -= args.size_input[1]/2
@@ -198,22 +213,31 @@ def main():
     log.debug(args)
 
     if args.dryrun:
-        log.warn("Exiting: dryrun...")
+        log.error("Dryrun. Exiting...")
         sys.exit()
 
-    if args.size_output[0] <= 4096 and args.size_output[1] <= 4096:
-        #fetch one tile
-        img = fetch_tile(wms, tm35_coordinates, args.size_input, args.size_output, args.layer)
+    log.info("ETRS-TM35FIN: " + str(tm35_coordinates))
+    if args.pdf:
+        log.warn("Fetching PDF. WIP. Check arguments. Only location: size_output and scale used!")
+        pdf_file = fetch_pdf(tm35_coordinates[0], tm35_coordinates[1], args.size_output[0], args.size_output[1], args.scale)
+        with open(args.output, "wb") as fh:
+            fh.write(pdf_file)
+
+    else:
+
+        wms = owslib.wms.WebMapService(args.url + args.service)
+
+        if args.size_output[0] <= 4096 and args.size_output[1] <= 4096:
+            #fetch one tile
+            img = fetch_tile(wms, tm35_coordinates, args.size_input, args.size_output, args.layer)
+        else:
+            #loop and fetch tiles
+            raise(NotImplementedError)
+
         if args.output != None:
             out = open(args.output, "wb")
             out.write(img.read())
             out.close()
-            return
-        else:
-            raise(NotImplementedError)
-    else:
-        #loop and fetch tiles
-        raise(NotImplementedError)
 
 if __name__ == "__main__":
     main()

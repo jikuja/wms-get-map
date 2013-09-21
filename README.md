@@ -18,6 +18,8 @@ wms_get_map --output=foo.png -a taalaritie1+espoo
 
 wms_get_map --url="http://kartat.espoo.fi/TeklaOgcWeb/WMS.ashx" --service="" --layer=Opaskartta  --output=foo.png 368673.5409250181 6676813.173829354
 
+wms_get_map --output=foo.pdf --pdf --size-output=210x210 --scale=10000 -a taalaritie1+espoo
+
 wms_get_map -h
 
 
