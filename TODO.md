@@ -3,7 +3,9 @@ TODOs
 
 * KKJ support
 * Big file(=dimension over 4096 pixels) support
-* Pikakartta.kapsi.fi support
+* Dedicated scale and size options for --pdf
+    * --pdf-size
+    * --pdf-scale
 
 BUGS:
 * OWSLib's python 3 support
