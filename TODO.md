@@ -6,6 +6,7 @@ TODOs
 * Dedicated scale and size options for --pdf
     * --pdf-size
     * --pdf-scale
+* Remove --address and autodetect address and coordinates
 
 BUGS:
 * OWSLib's python 3 support
